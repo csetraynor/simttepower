@@ -1,2 +1,7 @@
 ^simttepower\.Rproj$
 ^\.Rproj\.user$
+^LICENSE\.md$
+^README\.Rmd$
+^reports$
+^dev$
+^Makefile$
