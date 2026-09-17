@@ -18,7 +18,15 @@ knitr::opts_chunk$set(
 <!-- badges: start -->
 <!-- badges: end -->
 
-The goal of simttepower is to ...
+simttepower is a companion to [simtte](https://github.com/csetraynor/simtte),
+providing trial replication and simulation-based power and
+operating-characteristic analysis on top of simtte's single-cohort PK/PD
+time-to-event simulator. Given a trial design and a grid of scenarios that
+vary any one factor (a model parameter, a formula coefficient, a dosing
+regimen, a sampling schedule, sample size, follow-up, or covariate
+distribution), simttepower replicates each scenario, applies one or more
+analysis functions to each simulated trial, and summarises operating
+characteristics -- power, type I error, bias, coverage -- across the grid.
 
 ## Installation
 
@@ -31,25 +39,32 @@ pak::pak("csetraynor/simttepower")
 
 ## Example
 
-This is a basic example which shows you how to solve a common problem:
+Two arms of a built-in PK/PD hazard model, varying the nonlinear-link
+`IC50` parameter on the experimental arm, replicated and summarised:
 
 ```{r example}
 library(simttepower)
-## basic example code
+
+comparator <- arm(label = "comparator", n = 40, model = "irm1_hazard",
+  end = 24, param = list(CL = 2, V2 = 20, KA = 1, KIN = 1, KOUT = 0.5,
+    IC50 = 1, IMAX = 0.9, H0 = 0.15))
+experimental <- arm(label = "experimental", n = 40, model = "irm1_hazard",
+  end = 24, param = list(CL = 2, V2 = 20, KA = 1, KIN = 1, KOUT = 0.5,
+    IC50 = 1, IMAX = 0.9, H0 = 0.15))
+
+design <- trial_design(
+  arms = list(comparator, experimental),
+  analyses = list(coxph = analysis_coxph)
+)
+
+grid <- scenario_grid(design, over = list(arm = "experimental",
+  field = "param.IC50", values = c(1, 2, 4)))
+
+res <- power_sim(grid, n_sims = 5, seed = 1, progress = FALSE)
+summary(res)
 ```
 
-What is special about using `README.Rmd` instead of just `README.md`? You can include R chunks like so:
-
-```{r cars}
-summary(cars)
-```
+See `vignette("power-analysis")` for a real dosing-regimen contrast, a
+covariate-adjusted analysis, and a direction-aware rejection rule.
 
 You'll still need to render `README.Rmd` regularly, to keep `README.md` up-to-date. `devtools::build_readme()` is handy for this.
-
-You can also embed plots, for example:
-
-```{r pressure, echo = FALSE}
-plot(pressure)
-```
-
-In that case, don't forget to commit and push the resulting figure files, so they display on GitHub and CRAN.

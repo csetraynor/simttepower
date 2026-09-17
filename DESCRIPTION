@@ -2,15 +2,25 @@ Package: simttepower
 Title: Power and Operating-Characteristic Analysis for PK/PD Time-to-Event
     Trials
 Version: 0.0.0.9000
-Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
-License: GPL (>= 3)
+Authors@R:
+    person("Carlos", "Traynor", , "carlos.traynor.qcp@gmail.com", role = c("aut", "cre"))
+Description: A companion to 'simtte', providing trial replication and
+    simulation-based power and operating-characteristic analysis on top
+    of its single-cohort PK/PD time-to-event simulator. Given a trial
+    design (arms, a 'simtte' model or formula, sample size, follow-up)
+    and a grid of scenarios that vary any one factor -- a model
+    parameter, a formula coefficient, a dosing regimen, a sampling
+    schedule, sample size, follow-up, or covariate distribution --
+    'simttepower' replicates each scenario, applies one or more
+    user-pluggable or built-in analysis functions to each simulated
+    trial, and summarises operating characteristics such as power, type
+    I error, bias, and coverage across the grid.
+License: GPL (>= 2)
 Encoding: UTF-8
 Language: en-US
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 8.0.0
-Suggests: 
+Suggests:
     ggplot2,
     knitr,
     rmarkdown,
@@ -18,8 +28,10 @@ Suggests:
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
 VignetteBuilder: knitr
-Imports: 
+Imports:
     parallel,
     simtte (>= 1.1.0)
-Remotes: 
+# Dev-only: installs simtte from GitHub since it is not yet on CRAN.
+# REMOVE BEFORE CRAN SUBMISSION.
+Remotes:
     csetraynor/simtte

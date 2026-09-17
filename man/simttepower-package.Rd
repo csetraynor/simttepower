@@ -6,14 +6,14 @@
 \alias{simttepower-package}
 \title{simttepower: Power and Operating-Characteristic Analysis for PK/PD Time-to-Event Trials}
 \description{
-What the package does (one paragraph).
+A companion to 'simtte', providing trial replication and simulation-based power and operating-characteristic analysis on top of its single-cohort PK/PD time-to-event simulator. Given a trial design (arms, a 'simtte' model or formula, sample size, follow-up) and a grid of scenarios that vary any one factor -- a model parameter, a formula coefficient, a dosing regimen, a sampling schedule, sample size, follow-up, or covariate distribution -- 'simttepower' replicates each scenario, applies one or more user-pluggable or built-in analysis functions to each simulated trial, and summarises operating characteristics such as power, type I error, bias, and coverage across the grid.
 }
 \author{
-\strong{Maintainer}: First Last \email{first.last@example.com}
+\strong{Maintainer}: Carlos Traynor \email{carlos.traynor.qcp@gmail.com}
 
 Authors:
 \itemize{
-  \item First Last \email{first.last@example.com}
+  \item Carlos Traynor \email{carlos.traynor.qcp@gmail.com}
 }
 
 }
