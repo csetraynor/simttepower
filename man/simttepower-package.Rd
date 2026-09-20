@@ -4,10 +4,49 @@
 \name{simttepower-package}
 \alias{simttepower}
 \alias{simttepower-package}
-\title{simttepower: Power and Operating-Characteristic Analysis for PK/PD Time-to-Event Trials}
+\title{simttepower: trial replication and power analysis for simtte}
 \description{
-A companion to 'simtte', providing trial replication and simulation-based power and operating-characteristic analysis on top of its single-cohort PK/PD time-to-event simulator. Given a trial design (arms, a 'simtte' model or formula, sample size, follow-up) and a grid of scenarios that vary any one factor -- a model parameter, a formula coefficient, a dosing regimen, a sampling schedule, sample size, follow-up, or covariate distribution -- 'simttepower' replicates each scenario, applies one or more user-pluggable or built-in analysis functions to each simulated trial, and summarises operating characteristics such as power, type I error, bias, and coverage across the grid.
+simttepower is a companion to \pkg{simtte} (>= 1.1.0, a hard
+dependency -- every simulated trial arm is built on
+\code{\link[simtte]{sim_tte_ode}}): given a trial design and a grid
+of scenarios that vary one or more factors, it replicates each
+scenario, applies one or more analysis functions, and summarises
+operating characteristics (power, type I error) across the grid.
 }
+\section{Feature families}{
+
+\describe{
+\item{Design and grid objects}{\code{\link{arm}()},
+\code{\link{trial_design}()}, \code{\link{scenario_grid}()} --
+define one or more trial arms, collect them with their analysis
+function(s), and cross a base design against one or more varied
+factors (a model parameter, a dosing regimen, a covariate
+distribution, sample size, follow-up, ...).}
+\item{Analysis functions and rejection rules}{
+\code{\link{analysis_coxph}()}, \code{\link{analysis_logrank}()}
+-- built-in analysis functions (any \code{function(events, ...)
+    -> named numeric} also works); \code{\link{reject_default}()},
+\code{\link{reject_direction}()} -- pluggable rejection rules
+\code{\link{power_sim}()}/\code{\link{summary.simttepower_result}()}
+apply.}
+\item{Execution}{\code{\link{power_sim}()} -- the replication
+engine, sequential by default or across local worker processes
+(\code{workers = }); \code{\link{power_sim_chunks}()},
+\code{\link{power_sim_chunk}()}, \code{\link{power_sim_merge}()}
+-- split a run into independent chunks for a job scheduler or
+any array-job style execution. All three give byte-identical
+results for the same seed.}
+\item{Summarising and plotting}{
+\code{\link{summary.simttepower_result}()} -- one row per
+scenario x analysis operating-characteristic summary;
+\code{\link{plot_power}()} -- a power/operating-characteristic
+curve from that summary (needs \pkg{ggplot2}, a \code{Suggests}
+dependency).}
+}
+
+See \code{vignette("power-analysis")} for the full workflow.
+}
+
 \author{
 \strong{Maintainer}: Carlos Traynor \email{carlos.traynor.qcp@gmail.com}
 

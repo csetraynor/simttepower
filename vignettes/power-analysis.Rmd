@@ -18,69 +18,57 @@ knitr::opts_chunk$set(
 library(simttepower)
 ```
 
-This is a Phase 1 stub: a small, fast-running toy example showing the
-object -> engine -> summary flow end to end, not a realistic power curve
-(`n_sims` here is single digits, purely to exercise the code path). A
-full worked vignette, with a real replicate count and a real power curve,
-is deferred to a later sub-phase once Phase 2/3 parallelism makes that
-runtime acceptable for a CRAN vignette build.
-
-## What simttepower estimates
+## What simttepower is
 
 simttepower is a companion to
-[simtte](https://github.com/csetraynor/simtte). Simulation-side
-parameters -- a `param` entry, a dose, a covariate distribution -- are
-*truth*, baked into a scenario; they are never something an analysis
-function estimates. Power here is always about a contrast or coefficient
-an analysis function estimates from the simulated `events` and the labels
-`power_sim()` attaches to them (`arm`, `regimen`, `dose` when declared,
-and any `covariates` columns): between arms, across dose levels, or
-adjusted for covariates. Estimating a nonlinear PK/PD parameter (an
-`IC50`, an `EMAX`) from event data is out of scope -- bring your own
-analysis function for that.
+[simtte](https://github.com/csetraynor/simtte): given a trial design
+(arms, a simtte model, sample size, follow-up) and a grid of scenarios
+that vary one or more factors -- a model parameter, a dosing regimen, a
+covariate distribution, sample size, and so on -- simttepower replicates
+each scenario many times, applies one or more analysis functions to
+each simulated trial, and summarises operating characteristics (power,
+type I error) across the grid. It runs that replication sequentially,
+across local worker processes, or split into independent chunks for a
+job scheduler -- all three give byte-identical results for the same
+seed, which is this vignette's own running theme.
 
-## A minimal example
+## Building blocks: `arm()` and `trial_design()`
 
-Two arms of the same built-in model, varying the nonlinear-link `IC50`
-parameter on the experimental arm:
+An `arm()` is everything [simtte::sim_tte_ode()] needs to simulate one
+trial arm, plus a label. A `trial_design()` collects one or more arms
+and the analysis function(s) applied to their simulated events:
 
-```{r minimal}
-comparator <- arm(label = "comparator", n = 40, model = "irm1_hazard",
-  end = 24, param = list(CL = 2, V2 = 20, KA = 1, KIN = 1, KOUT = 0.5,
-    IC50 = 1, IMAX = 0.9, H0 = 0.15))
-experimental <- arm(label = "experimental", n = 40, model = "irm1_hazard",
-  end = 24, param = list(CL = 2, V2 = 20, KA = 1, KIN = 1, KOUT = 0.5,
-    IC50 = 1, IMAX = 0.9, H0 = 0.15))
+```{r design}
+p <- list(CL = 2, V2 = 20, KA = 1, KIN = 1, KOUT = 0.5, IC50 = 1,
+  IMAX = 0.9, H0 = 0.15)
+
+comparator <- arm(label = "comparator", n = 20, model = "irm1_hazard",
+  end = 24, param = p)
+experimental <- arm(label = "experimental", n = 20, model = "irm1_hazard",
+  end = 24, param = p)
 
 design <- trial_design(
   arms = list(comparator, experimental),
-  analyses = list(coxph = analysis_coxph, logrank = analysis_logrank)
+  analyses = list(coxph = analysis_coxph)
 )
-
-grid <- scenario_grid(design, over = list(arm = "experimental",
-  field = "param.IC50", values = c(1, 2, 4)))
-grid
-
-res <- power_sim(grid, n_sims = 5, seed = 1, progress = FALSE)
-res
-summary(res)
 ```
 
-## A real dosing-regimen contrast
+## A grid of scenarios: `scenario_grid()`
 
 `regimen` is a label, never derived automatically from a dosing data
 frame -- a loading-then-maintenance schedule has no single meaningful
-numeric summary. Vary `data` (the dosing events) directly:
+numeric summary. Here the experimental arm's `data` (its dosing events)
+is the varied factor, contrasting once-weekly dosing against a
+loading-then-maintenance schedule:
 
-```{r dosing}
-qw <- data.frame(ID = 1:40, time = 0, amt = 100, cmt = 1, evid = 1,
+```{r grid}
+qw <- data.frame(ID = 1:20, time = 0, amt = 100, cmt = 1, evid = 1,
   ii = 1, addl = 23)                                    # 100, once weekly
-q4w_loading <- data.frame(ID = 1:40, time = 0, amt = 400, cmt = 1,
+q4w_loading <- data.frame(ID = 1:20, time = 0, amt = 400, cmt = 1,
   evid = 1, ii = 4, addl = 5)                            # 400 q4w x 6 doses
 
-dosing_arm <- arm(label = "experimental", n = 40, model = "irm1_hazard",
-  end = 24, param = list(CL = 2, V2 = 20, KA = 1, KIN = 1, KOUT = 0.5,
-    IC50 = 1, IMAX = 0.9, H0 = 0.15), data = qw, regimen = "qw")
+dosing_arm <- arm(label = "experimental", n = 20, model = "irm1_hazard",
+  end = 24, param = p, data = qw, regimen = "qw")
 
 design_dosing <- trial_design(
   arms = list(comparator, dosing_arm),
@@ -89,80 +77,48 @@ design_dosing <- trial_design(
   })
 )
 
-grid_dosing <- scenario_grid(design_dosing, over = list(
+grid <- scenario_grid(design_dosing, over = list(
   arm = "experimental", field = "data", values = list(qw, q4w_loading)))
-grid_dosing
-
-res_dosing <- power_sim(grid_dosing, n_sims = 5, seed = 2, progress = FALSE)
-summary(res_dosing)
+grid
 ```
 
-## A real covariate distribution, and a covariate-adjusted analysis
+## Running the replication engine: `power_sim()`
 
-`covariates` is joined onto `events` at baseline (first row per subject
-when time-varying); the same data frame both drives the hazard (via
-`beta`) and is available to any analysis function's own formula:
+`power_sim(grid, n_sims, seed)` simulates and analyses every
+(scenario x replicate) combination, sequentially by default:
 
-```{r covariates}
-age_young <- data.frame(ID = 1:40, time = 0, age = stats::rnorm(40, 40, 5))
-age_old <- data.frame(ID = 1:40, time = 0, age = stats::rnorm(40, 65, 5))
-
-cov_arm_comparator <- arm(label = "comparator", n = 40, model = "irm1_hazard",
-  end = 24, param = list(CL = 2, V2 = 20, KA = 1, KIN = 1, KOUT = 0.5,
-    IC50 = 1, IMAX = 0.9, H0 = 0.15), covariates = age_young,
-  beta = c(age = 0.01))
-cov_arm_experimental <- arm(label = "experimental", n = 40, model = "irm1_hazard",
-  end = 24, param = list(CL = 2, V2 = 20, KA = 1, KIN = 1, KOUT = 0.5,
-    IC50 = 2, IMAX = 0.9, H0 = 0.15), covariates = age_young,
-  beta = c(age = 0.01))
-
-design_cov <- trial_design(
-  arms = list(cov_arm_comparator, cov_arm_experimental),
-  analyses = list(coxph_adj = function(events) {
-    analysis_coxph(events, formula = ~ arm + age)
-  })
-)
-
-grid_cov <- scenario_grid(design_cov, over = list(arm = "experimental",
-  field = "covariates", values = list(age_young, age_old)))
-
-res_cov <- power_sim(grid_cov, n_sims = 5, seed = 3, progress = FALSE)
-summary(res_cov)
+```{r power_sim}
+res <- power_sim(grid, n_sims = 8, seed = 1, progress = FALSE)
+res
 ```
 
-## Interval-censored events
+`power_sim(seed = s)` run twice gives byte-identical `results`
+(excluding `runtime_sec`, real wall-clock time) -- the same seed always
+gives the same answer, regardless of how the run is later parallelised
+or chunked (the rest of this vignette).
 
-An analysis function is any `function(events, ...) -> named numeric`, so
-an interval-censored fit on `simtte::add_interval_censoring()`'s output
-needs no separate simttepower code path -- just a user-supplied analysis
-function:
+## `summary()` and `plot_power()`
 
-```{r interval-censored, eval = FALSE}
-analysis_interval_coxph <- function(events, formula = ~arm) {
-  fit <- survival::coxph(
-    survival::Surv(sim_time_left, sim_time_right, type = "interval2") ~
-      eval(formula[[2]]),
-    data = events
-  )
-  s <- summary(fit)
-  stats::setNames(s$coefficients[, "coef"], paste0("estimate_", rownames(s$coefficients)))
-}
+`summary()` collapses the raw per-replicate results to one row per
+(scenario x analysis): rejection rate (power, here, since the two arms'
+`param` differ only in dosing, not in the underlying hazard), its
+binomial SE, error counts, and median event/runtime summaries.
+
+```{r summary}
+summary(res)
 ```
 
-## A direction-aware rejection rule
+`plot_power()` plots a rejection-rate curve over one varied factor from
+that summary -- here with a plain factor column, since `data` (the
+varied field in this example) isn't itself a plottable x-axis; a
+numeric varied factor (a sample size or parameter grid) plots directly.
+Requires `ggplot2` (`Suggests`); skipped below if it isn't installed.
 
-By default, `power_sim()`/`summary()` reject when `p < alpha` alone. A
-two-sided test that rejects in the *wrong* direction should not usually
-count as a "win" -- pass `reject_direction` and a scenario `truth`:
-
-```{r direction}
-grid_truth <- scenario_grid(design, over = list(arm = "experimental",
-  field = "param.IC50", values = c(1, 4)),
-  truth = function(v) c(estimate_armexperimental = -0.3 * (v$IC50 - 1)))
-
-res_truth <- power_sim(grid_truth, n_sims = 5, seed = 4,
-  reject = reject_direction, progress = FALSE)
-summary(res_truth)
+```{r plot, eval = requireNamespace("ggplot2", quietly = TRUE)}
+grid_n <- scenario_grid(design, over = list(arm = "experimental",
+  field = "n", values = c(20, 40, 60)))
+res_n <- power_sim(grid_n, n_sims = 8, seed = 2, progress = FALSE)
+plot_power(summary(res_n), x = "n")
 ```
 
 ## Running on multiple local workers
@@ -175,31 +131,68 @@ via `parallel = "fork"`) instead of running sequentially --
 `simtte::simtte_prepare_model()` (see `?simtte::simtte_prepare_model`)
 once per distinct model, in this process, before any worker starts --
 every worker then only ever loads that already-compiled model, never
-rebuilds it. Doing this by hand looks like:
+rebuilds it.
 
-```{r parallel-manual, eval = parallel::detectCores() >= 2}
-cl <- parallel::makePSOCKcluster(2)
-parallel::clusterCall(cl, library, "simttepower", character.only = TRUE)
-parallel::clusterCall(cl, simtte::simtte_prepare_model, model = "irm1_hazard")
-res_manual <- parallel::parLapply(cl, 1:2, function(s) {
-  simtte::sim_tte_ode(model = "irm1_hazard", n = 20, end = 24, delta = 2,
-    seed = s, param = list(CL = 2, V2 = 20, KA = 1, KIN = 1, KOUT = 0.5,
-      IC50 = 1, IMAX = 0.9, H0 = 0.15))
-})
-parallel::stopCluster(cl)
-length(res_manual)
-```
-
-`power_sim(workers = 2)` wraps exactly this pattern (plus the RNG-stream
-bookkeeping from the sections above), so the ordinary call is normally
-all that is needed:
-
-```{r parallel-power-sim, eval = parallel::detectCores() >= 2}
-res_parallel <- power_sim(grid, n_sims = 20, seed = 1, progress = FALSE,
+```{r parallel, eval = parallel::detectCores() >= 2}
+res_parallel <- power_sim(grid, n_sims = 8, seed = 1, progress = FALSE,
   workers = 2)
-summary(res_parallel)
+identical(res$results[setdiff(names(res$results), "runtime_sec")],
+  res_parallel$results[setdiff(names(res_parallel$results), "runtime_sec")])
 ```
 
-For housekeeping simtte's own compiled-model cache (e.g. after an R or
-package upgrade), see `?simtte::simtte_model_cache_clear` --
-simttepower keeps no cache of its own for this.
+## Chunking a run for a cluster
+
+For a run too large for one machine's local workers, `power_sim_chunks()`/
+`power_sim_chunk()`/`power_sim_merge()` split it into independent chunks
+that can execute as separate processes -- on a job scheduler (SGE,
+Slurm; see the array-job templates and README under
+`system.file("templates", package = "simttepower")`), or, as shown here,
+just in a loop on one machine. No scheduler dependency: plain files (a
+manifest plus one file per chunk) are the entire mechanism, and the
+result is byte-identical to a single sequential `power_sim()` call
+regardless of how many chunks it was split into:
+
+```{r chunks}
+chunk_dir <- tempfile()
+power_sim_chunks(grid, n_sims = 8, seed = 1, n_chunks = 2, dir = chunk_dir)
+for (i in 1:2) power_sim_chunk(chunk_dir, i, progress = FALSE)
+res_chunked <- power_sim_merge(chunk_dir)
+
+identical(res$results[setdiff(names(res$results), "runtime_sec")],
+  res_chunked$results[setdiff(names(res_chunked$results), "runtime_sec")])
+```
+
+Each array-job task in the templates calls `power_sim_chunk(dir, i)`
+where `i` only ever selects *which rows of the manifest* that task
+owns -- the seed lives once, on the manifest `power_sim_chunks()`
+wrote, never derived from a task id.
+
+## The estimand boundary
+
+Simulation-side parameters -- a `param` entry, a dose, a covariate
+distribution -- are *truth*, baked into a scenario; they are never
+something an analysis function estimates. Power here is always about a
+contrast or coefficient an analysis function estimates from the
+simulated `events` and the labels `power_sim()` attaches to them
+(`arm`, `regimen`, `dose` when declared, and any `covariates` columns):
+between arms, across dose levels, or adjusted for covariates.
+Estimating a nonlinear PK/PD parameter (an `IC50`, an `EMAX`) from event
+data is out of scope -- bring your own analysis function for that.
+
+## Other patterns
+
+A few capabilities not walked through step by step above, each covered
+in its own reference page:
+
+- **Covariate-adjusted analysis**: `arm(covariates = , beta = )` joins a
+  covariate data frame onto simulated events at baseline; any analysis
+  function's own `formula` can then include it (`?arm`, `?analysis_coxph`).
+- **Interval-censored events**: an analysis function is any
+  `function(events, ...) -> named numeric`, so a fit on
+  [simtte::add_interval_censoring()]'s output needs no separate
+  simttepower code path -- just a user-supplied analysis function
+  calling `survival::Surv(..., type = "interval2")`.
+- **Direction-aware rejection**: [reject_direction()] additionally
+  requires a rejection's sign to match a scenario's declared `truth`
+  (`scenario_grid(truth = )`), rather than [reject_default()]'s plain
+  `p < alpha`.

@@ -119,7 +119,7 @@ test_that(".handle_worker_failures() turns a try-error placeholder into an error
     # mclapply().
     g <- scenario_grid(.test_design(), over = list(arm = "experimental",
         field = "param.IC50", values = c(1)))
-    task_table <- data.frame(scenario_row = 1L, replicate = 1L)
+    task_table <- data.frame(scenario_row = 1L, replicate = 1L, global_index = 1L)
     cond <- simpleError("worker killed")
     stub <- structure("try-error placeholder", class = "try-error",
         condition = cond)

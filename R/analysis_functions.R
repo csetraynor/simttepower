@@ -47,6 +47,8 @@
 #' analysis_coxph(events)
 #' analysis_logrank(events)
 #' }
+#' @seealso [trial_design()] (where an analysis function is registered),
+#'   [reject_default()], [reject_direction()]
 #' @name analysis_functions
 NULL
 

@@ -5,3 +5,5 @@
 ^dev$
 ^Makefile$
 ^\.claude$
+^STATUS\.md$
+^cran-comments\.md$

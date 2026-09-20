@@ -13,7 +13,8 @@ power_sim(
   progress = interactive(),
   workers = 1,
   cluster = NULL,
-  parallel = c("psock", "fork")
+  parallel = c("psock", "fork"),
+  clear_cache = FALSE
 )
 }
 \arguments{
@@ -59,12 +60,24 @@ supplied \code{cluster} is used as-is and is \strong{never stopped} by
 \code{parallel::mclapply()}; errors clearly on Windows rather than
 silently running sequentially). Only consulted when \code{workers > 1}
 or \code{cluster} is supplied.}
+
+\item{clear_cache}{Logical, default \code{FALSE}. If \code{TRUE}, clears
+simtte's compiled-model cache (\code{simtte::simtte_model_cache_clear()},
+current-version subdirectory only) after this call finishes, error
+or not -- never before the run, which would defeat the
+prepare/cache design by forcing every model to recompile. Useful to
+free disk space after a large one-off run; leave \code{FALSE} for
+repeated \code{power_sim()} calls in the same session, which benefit
+from the cache staying warm between them.}
 }
 \value{
 A \code{"simttepower_result"} object: \verb{$results}, one row per
 scenario x replicate x analysis (see \verb{reports/01_phase1_plan.md}
-section 5 for the column list), plus the grid, \code{n_sims}, \code{seed},
-\code{reject}, and \code{alpha} used, for \code{\link[=summary.simttepower_result]{summary.simttepower_result()}}.
+section 5 for the column list, plus \code{global_index}, the task's
+position in the flat scenario x replicate sequence -- what
+\code{\link[=power_sim_merge]{power_sim_merge()}} sorts a chunked run's results by), plus the
+grid, \code{n_sims}, \code{seed}, \code{reject}, and \code{alpha} used, for
+\code{\link[=summary.simttepower_result]{summary.simttepower_result()}}.
 }
 \description{
 Simulates and analyses every (scenario x replicate) in \code{grid},
@@ -103,5 +116,9 @@ summary(res)
 }
 }
 \seealso{
-\code{\link[=scenario_grid]{scenario_grid()}}, \code{\link[=summary.simttepower_result]{summary.simttepower_result()}}
+\code{\link[=scenario_grid]{scenario_grid()}}, \code{\link[=summary.simttepower_result]{summary.simttepower_result()}},
+\code{\link[=plot_power]{plot_power()}} for a power curve from that summary. For splitting a
+run across separate processes/a job scheduler instead of local
+\code{workers}: \code{\link[=power_sim_chunks]{power_sim_chunks()}}, \code{\link[=power_sim_chunk]{power_sim_chunk()}},
+\code{\link[=power_sim_merge]{power_sim_merge()}}.
 }

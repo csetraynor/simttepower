@@ -78,3 +78,7 @@ analysis_coxph(events)
 analysis_logrank(events)
 }
 }
+\seealso{
+\code{\link[=trial_design]{trial_design()}} (where an analysis function is registered),
+\code{\link[=reject_default]{reject_default()}}, \code{\link[=reject_direction]{reject_direction()}}
+}

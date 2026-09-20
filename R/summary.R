@@ -16,7 +16,22 @@
 #'   `n_errors`, `median_runtime_sec`, and (when the analysed events
 #'   carried them) `median_duration` and one `median_events_<arm>` per
 #'   arm.
-#' @seealso [power_sim()], [reject_default()]
+#' @seealso [power_sim()], [reject_default()], [plot_power()]
+#' @examples
+#' \donttest{
+#' comparator <- arm(label = "comparator", n = 30, model = "irm1_hazard",
+#'   end = 24, param = list(CL = 2, V2 = 20, KA = 1, KIN = 1, KOUT = 0.5,
+#'     IC50 = 1, IMAX = 0.9, H0 = 0.15))
+#' experimental <- arm(label = "experimental", n = 30, model = "irm1_hazard",
+#'   end = 24, param = list(CL = 2, V2 = 20, KA = 1, KIN = 1, KOUT = 0.5,
+#'     IC50 = 3, IMAX = 0.9, H0 = 0.15))
+#' design <- trial_design(arms = list(comparator, experimental),
+#'   analyses = list(coxph = analysis_coxph))
+#' grid <- scenario_grid(design, over = list(arm = "experimental",
+#'   field = "n", values = c(30, 60)))
+#' res <- power_sim(grid, n_sims = 5, seed = 1, progress = FALSE)
+#' summary(res)
+#' }
 #' @export
 summary.simttepower_result <- function(object, ...) {
     res <- object$results

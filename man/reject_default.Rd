@@ -41,6 +41,13 @@ argument of \code{\link[=scenario_grid]{scenario_grid()}}) -- decision 2 in
 \emph{wrong} direction should not count as a "win," but this is a pluggable
 rule, not something baked into \code{\link[=analysis_coxph]{analysis_coxph()}} itself.
 }
+\examples{
+row <- list(p_armexperimental = 0.01, estimate_armexperimental = -0.4)
+reject_default(row)
+reject_direction(row, truth = c(estimate_armexperimental = -0.3))
+# A rejection in the wrong direction does not count as a "win":
+reject_direction(row, truth = c(estimate_armexperimental = 0.3))
+}
 \seealso{
-\code{\link[=power_sim]{power_sim()}}, \code{\link[=scenario_grid]{scenario_grid()}}
+\code{\link[=power_sim]{power_sim()}}, \code{\link[=scenario_grid]{scenario_grid()}}, \link{analysis_functions}
 }

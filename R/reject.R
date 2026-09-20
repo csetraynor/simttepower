@@ -25,7 +25,13 @@
 #'
 #' @return `TRUE`/`FALSE`. Always `FALSE` (never `NA`) when a needed
 #'   value is missing, e.g. a non-converged fit.
-#' @seealso [power_sim()], [scenario_grid()]
+#' @seealso [power_sim()], [scenario_grid()], [analysis_functions]
+#' @examples
+#' row <- list(p_armexperimental = 0.01, estimate_armexperimental = -0.4)
+#' reject_default(row)
+#' reject_direction(row, truth = c(estimate_armexperimental = -0.3))
+#' # A rejection in the wrong direction does not count as a "win":
+#' reject_direction(row, truth = c(estimate_armexperimental = 0.3))
 #' @export
 reject_default <- function(row, alpha = 0.05, p_col = NULL) {
     p <- .pick_named(row, p_col, "p")

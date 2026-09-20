@@ -52,12 +52,27 @@
 #'   `parallel::mclapply()`; errors clearly on Windows rather than
 #'   silently running sequentially). Only consulted when `workers > 1`
 #'   or `cluster` is supplied.
+#' @param clear_cache Logical, default `FALSE`. If `TRUE`, clears
+#'   simtte's compiled-model cache (`simtte::simtte_model_cache_clear()`,
+#'   current-version subdirectory only) after this call finishes, error
+#'   or not -- never before the run, which would defeat the
+#'   prepare/cache design by forcing every model to recompile. Useful to
+#'   free disk space after a large one-off run; leave `FALSE` for
+#'   repeated `power_sim()` calls in the same session, which benefit
+#'   from the cache staying warm between them.
 #'
 #' @return A `"simttepower_result"` object: `$results`, one row per
 #'   scenario x replicate x analysis (see `reports/01_phase1_plan.md`
-#'   section 5 for the column list), plus the grid, `n_sims`, `seed`,
-#'   `reject`, and `alpha` used, for [summary.simttepower_result()].
-#' @seealso [scenario_grid()], [summary.simttepower_result()]
+#'   section 5 for the column list, plus `global_index`, the task's
+#'   position in the flat scenario x replicate sequence -- what
+#'   [power_sim_merge()] sorts a chunked run's results by), plus the
+#'   grid, `n_sims`, `seed`, `reject`, and `alpha` used, for
+#'   [summary.simttepower_result()].
+#' @seealso [scenario_grid()], [summary.simttepower_result()],
+#'   [plot_power()] for a power curve from that summary. For splitting a
+#'   run across separate processes/a job scheduler instead of local
+#'   `workers`: [power_sim_chunks()], [power_sim_chunk()],
+#'   [power_sim_merge()].
 #' @examples
 #' \donttest{
 #' comparator <- arm(label = "comparator", n = 30, model = "irm1_hazard",
@@ -77,7 +92,7 @@
 #' @export
 power_sim <- function(grid, n_sims, seed, reject = reject_default,
     alpha = 0.05, progress = interactive(), workers = 1, cluster = NULL,
-    parallel = c("psock", "fork")) {
+    parallel = c("psock", "fork"), clear_cache = FALSE) {
     parallel <- match.arg(parallel)
     .validate_power_sim_args(grid, n_sims, seed)
     .validate_parallel_args(workers, cluster, parallel)
@@ -90,18 +105,36 @@ power_sim <- function(grid, n_sims, seed, reject = reject_default,
     }
     workers <- as.integer(workers)
     n_sims <- as.integer(n_sims)
-    n_scn <- nrow(grid)
-    n_tasks <- n_scn * n_sims
+    if (isTRUE(clear_cache)) {
+        on.exit(simtte::simtte_model_cache_clear(), add = TRUE)
+    }
 
-    task_table <- data.frame(
-        scenario_row = rep(seq_len(n_scn), each = n_sims),
-        replicate = rep(seq_len(n_sims), times = n_scn))
-    # Global-index -> RNG-stream mapping: a pure function of (scenario,
-    # replicate) identity, never of worker id or dispatch order -- the
-    # one invariant Phase 2/3 rely on (reports/01_phase1_plan.md section 5).
-    task_table$global_index <- (task_table$scenario_row - 1L) * n_sims +
-        task_table$replicate
+    result_rows <- .with_rng_restored({
+        task_table <- .build_task_table(grid, n_sims, seed)
+        .dispatch_tasks(grid, task_table, workers, cluster, parallel, progress)
+    })
 
+    structure(list(results = .rbind_fill(result_rows), grid = grid,
+        n_sims = n_sims, seed = seed, reject = reject, alpha = alpha,
+        call = sys.call()), class = "simttepower_result")
+}
+
+# ---------------------------------------------------------------------
+# Shared by power_sim() and power_sim_chunk() (R/power_sim_chunks.R):
+# building the task table (global-index -> L'Ecuyer stream mapping) and
+# dispatching it, sequentially or across local workers. Neither function
+# knows or cares whether it is running the full grid or one chunk's own
+# subset of it -- a task table row carries everything .run_task() needs.
+# ---------------------------------------------------------------------
+
+# Runs `expr` with the ambient RNG kind/state saved before and restored
+# after, regardless of how `expr` mutates .Random.seed while running --
+# every dispatched task reassigns .Random.seed directly, to a specific,
+# already-derived stream value, well after this wrapper starts. Its own
+# top-level "RNG session": power_sim() and power_sim_chunk() each use
+# exactly one, wrapping everything from stream derivation through
+# dispatch.
+.with_rng_restored <- function(expr) {
     old_kind <- RNGkind()[1]
     has_old_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
     old_seed <- if (has_old_seed) get(".Random.seed", envir = .GlobalEnv) else NULL
@@ -116,7 +149,31 @@ power_sim <- function(grid, n_sims, seed, reject = reject_default,
         } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
             rm(".Random.seed", envir = .GlobalEnv)
         }
-    }, add = TRUE)
+    })
+    expr
+}
+
+# The full (scenario x replicate) task table for `grid`/`n_sims`/`seed`:
+# one row per task, with its global index and precomputed L'Ecuyer-CMRG
+# RNG stream already attached. A pure function of (grid shape, n_sims,
+# seed) -- never of worker id, dispatch order, or how the caller later
+# subsets these rows (power_sim_chunk() calls this with the *same*
+# n_sims/seed as the full run, then keeps only its own chunk's rows, so
+# a replicate's stream never depends on how the run was chunked; see
+# reports/07_phase3_design.md). Must run inside .with_rng_restored() --
+# it switches RNGkind()/seeds the ambient RNG as a side effect and
+# leaves that switch in place for the caller's own dispatch loop to use.
+.build_task_table <- function(grid, n_sims, seed) {
+    n_scn <- nrow(grid)
+    n_tasks <- n_scn * n_sims
+    task_table <- data.frame(
+        scenario_row = rep(seq_len(n_scn), each = n_sims),
+        replicate = rep(seq_len(n_sims), times = n_scn))
+    # Global-index -> RNG-stream mapping: a pure function of (scenario,
+    # replicate) identity, never of worker id or dispatch order -- the
+    # one invariant Phase 2/3 rely on (reports/01_phase1_plan.md section 5).
+    task_table$global_index <- (task_table$scenario_row - 1L) * n_sims +
+        task_table$replicate
 
     RNGkind("L'Ecuyer-CMRG")
     set.seed(seed)
@@ -126,9 +183,17 @@ power_sim <- function(grid, n_sims, seed, reject = reject_default,
         streams[[i]] <- s
         s <- parallel::nextRNGStream(s)
     }
-
     task_table$stream <- streams[task_table$global_index]
+    task_table
+}
 
+# Runs every row of `task_table` (the full table, or any subset of it --
+# power_sim_chunk() passes a chunk's own rows here unchanged) and returns
+# the list of per-task result-row data frames, sequentially or across
+# local workers exactly as power_sim() always has.
+.dispatch_tasks <- function(grid, task_table, workers, cluster, parallel,
+    progress) {
+    n_tasks <- nrow(task_table)
     if (workers <= 1L) {
         # The Phase 1 path, unchanged: no cluster, no worker-setup code.
         if (isTRUE(progress)) {
@@ -141,14 +206,11 @@ power_sim <- function(grid, n_sims, seed, reject = reject_default,
             result_rows[[i]] <- .run_task(grid, task_table[i, ])
             if (isTRUE(progress)) utils::setTxtProgressBar(pb, i)
         }
+        result_rows
     } else {
-        result_rows <- .run_tasks_parallel(grid, task_table, workers,
-            cluster, parallel, progress)
+        .run_tasks_parallel(grid, task_table, workers, cluster, parallel,
+            progress)
     }
-
-    structure(list(results = .rbind_fill(result_rows), grid = grid,
-        n_sims = n_sims, seed = seed, reject = reject, alpha = alpha,
-        call = sys.call()), class = "simttepower_result")
 }
 
 .validate_power_sim_args <- function(grid, n_sims, seed) {
@@ -359,7 +421,8 @@ power_sim <- function(grid, n_sims, seed, reject = reject_default,
     scn_cols <- grid[task_row$scenario_row,
         setdiff(names(grid), "scenario"), drop = FALSE]
     rows <- lapply(names(scn$design$analyses), function(nm) {
-        .result_row(scn_cols, task_row$replicate, nm, c(error = msg), runtime)
+        .result_row(scn_cols, task_row$replicate, nm, c(error = msg), runtime,
+            task_row$global_index)
     })
     .rbind_fill(rows)
 }
@@ -393,7 +456,8 @@ power_sim <- function(grid, n_sims, seed, reject = reject_default,
     rows <- lapply(names(scn$design$analyses), function(nm) {
         out <- tryCatch(scn$design$analyses[[nm]](sim$events),
             error = function(e) c(error = conditionMessage(e)))
-        row <- .result_row(scn_cols, task_row$replicate, nm, out, runtime)
+        row <- .result_row(scn_cols, task_row$replicate, nm, out, runtime,
+            task_row$global_index)
         for (cn in names(event_summary)) row[[cn]] <- event_summary[[cn]]
         row
     })
@@ -407,7 +471,8 @@ power_sim <- function(grid, n_sims, seed, reject = reject_default,
     c(out, list(duration = max(events$sim_time, na.rm = TRUE)))
 }
 
-.result_row <- function(scn_cols, replicate, analysis_name, out, runtime) {
+.result_row <- function(scn_cols, replicate, analysis_name, out, runtime,
+    global_index = NA_integer_) {
     err <- NA_character_
     if (!is.null(names(out)) && "error" %in% names(out)) {
         err <- unname(out[["error"]])
@@ -424,7 +489,7 @@ power_sim <- function(grid, n_sims, seed, reject = reject_default,
             stringsAsFactors = FALSE),
         extra,
         data.frame(error = err, runtime_sec = runtime,
-            stringsAsFactors = FALSE))
+            global_index = global_index, stringsAsFactors = FALSE))
 }
 
 # Simulates every arm of a resolved design (do.call(sim_tte_ode, ...) per
