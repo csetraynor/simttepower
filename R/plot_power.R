@@ -13,10 +13,11 @@ utils::globalVariables(".data")
 
 #' Plot a power/operating-characteristic curve
 #'
-#' The common case: rejection rate (power, or type I error, depending on
-#' the scenario) over one varied factor, from a [summary.simttepower_result()]
-#' data frame. `ggplot2` is a `Suggests` dependency; `plot_power()` errors
-#' clearly, telling the user to install it, if it isn't available.
+#' The common case: rejection rate (power, or type I error -- see
+#' [summary.simttepower_result()]'s own `oc_label`) over one varied
+#' factor, from a [summary.simttepower_result()] data frame. `ggplot2`
+#' is a `Suggests` dependency; `plot_power()` errors clearly, telling
+#' the user to install it, if it isn't available.
 #'
 #' Deliberately just the one common shape (a curve, optionally coloured
 #' by a second factor, optionally faceted by a third, with a binomial CI
@@ -32,18 +33,23 @@ utils::globalVariables(".data")
 #'   x-axis (e.g. `"n"`, `"IC50"` -- whatever [scenario_grid()]'s `over`
 #'   named it).
 #' @param y Character scalar, default `"reject_rate"`: the column to plot
-#'   on the y-axis. The CI ribbon (`ci = TRUE`) only ever draws for the
-#'   default -- it needs `reject_se`, which `summary()` only computes for
-#'   `reject_rate`.
+#'   on the y-axis.
 #' @param color Character scalar or `NULL` (default): a second
 #'   varied-factor column to map to colour/fill (and the ribbon's
 #'   grouping), for comparing curves across e.g. two arms' sample sizes.
 #' @param facet Character scalar or `NULL` (default): a third
 #'   varied-factor column to facet by (`ggplot2::facet_wrap()`).
-#' @param ci Logical, default `TRUE`: draw a 95% binomial CI ribbon
-#'   (`reject_rate +/- 1.96 * reject_se`, clipped to `[0, 1]`) around the
-#'   curve. Only takes effect when `y = "reject_rate"` (the default) and
-#'   `summary` carries `reject_se`; silently skipped otherwise.
+#' @param ci Logical, default `TRUE`: draw a `y +/- 1.96 * <se column>`
+#'   ribbon (clipped to `[0, 1]`) around the curve, when there is an SE
+#'   column to draw it from -- see `se_col`. Silently skipped when there
+#'   isn't one, never an error (a `y` with no natural SE, e.g.
+#'   `"median_runtime_sec"`, is a perfectly good plot on its own).
+#' @param se_col Character scalar or `NULL` (default): the column to
+#'   draw the CI ribbon from. `NULL` auto-pairs by convention --
+#'   `"reject_se"` when `y = "reject_rate"` (the default), or `"<y>_se"`
+#'   for any other `y` if that column exists in `summary` -- and draws
+#'   no ribbon if neither is found. An explicit `se_col` must be a real
+#'   column of `summary`; errors clearly, naming it, otherwise.
 #'
 #' @return A `ggplot` object.
 #' @seealso [summary.simttepower_result()], [power_sim()]
@@ -66,7 +72,7 @@ utils::globalVariables(".data")
 #' }
 #' @export
 plot_power <- function(summary, x, y = "reject_rate", color = NULL,
-    facet = NULL, ci = TRUE) {
+    facet = NULL, ci = TRUE, se_col = NULL) {
     if (!requireNamespace("ggplot2", quietly = TRUE)) {
         stop("plot_power() needs the ggplot2 package. Install it with ",
             "install.packages(\"ggplot2\").", call. = FALSE)
@@ -76,12 +82,14 @@ plot_power <- function(summary, x, y = "reject_rate", color = NULL,
             "summary(power_sim(...)).", call. = FALSE)
     }
     cols <- names(summary)
-    for (nm in list(x = x, y = y, color = color, facet = facet)) {
+    for (nm in list(x = x, y = y, color = color, facet = facet,
+        se_col = se_col)) {
         if (!is.null(nm) && !nm %in% cols) {
             stop("'", nm, "' is not a column of `summary` (has: ",
                 paste(cols, collapse = ", "), ").", call. = FALSE)
         }
     }
+    se_col <- .resolve_se_col(y, se_col, cols)
 
     d <- as.data.frame(summary)
     if (!is.null(color)) d[[color]] <- factor(d[[color]])
@@ -94,17 +102,16 @@ plot_power <- function(summary, x, y = "reject_rate", color = NULL,
     }
     p <- ggplot2::ggplot(d, mapping)
 
-    draw_ci <- isTRUE(ci) && identical(y, "reject_rate") &&
-        "reject_se" %in% cols
+    draw_ci <- isTRUE(ci) && !is.null(se_col)
     if (draw_ci) {
         ribbon_mapping <- if (is.null(color)) {
             ggplot2::aes(
-                ymin = pmax(0, .data[[y]] - 1.96 * .data[["reject_se"]]),
-                ymax = pmin(1, .data[[y]] + 1.96 * .data[["reject_se"]]))
+                ymin = pmax(0, .data[[y]] - 1.96 * .data[[se_col]]),
+                ymax = pmin(1, .data[[y]] + 1.96 * .data[[se_col]]))
         } else {
             ggplot2::aes(
-                ymin = pmax(0, .data[[y]] - 1.96 * .data[["reject_se"]]),
-                ymax = pmin(1, .data[[y]] + 1.96 * .data[["reject_se"]]),
+                ymin = pmax(0, .data[[y]] - 1.96 * .data[[se_col]]),
+                ymax = pmin(1, .data[[y]] + 1.96 * .data[[se_col]]),
                 fill = .data[[color]], group = .data[[color]])
         }
         p <- p + ggplot2::geom_ribbon(ribbon_mapping, alpha = 0.15, colour = NA)
@@ -118,4 +125,15 @@ plot_power <- function(summary, x, y = "reject_rate", color = NULL,
         p <- p + ggplot2::labs(y = "Rejection rate")
     }
     p
+}
+
+# NULL se_col: auto-pair by convention -- "reject_se" for the default
+# y = "reject_rate" (unchanged from before se_col existed), "<y>_se"
+# for any other y, if that column exists; NULL (no ribbon, ever) if
+# neither is found. An explicit se_col is validated by the caller's own
+# column-membership loop before this runs.
+.resolve_se_col <- function(y, se_col, cols) {
+    if (!is.null(se_col)) return(se_col)
+    auto <- if (identical(y, "reject_rate")) "reject_se" else paste0(y, "_se")
+    if (auto %in% cols) auto else NULL
 }

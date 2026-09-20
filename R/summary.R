@@ -13,9 +13,26 @@
 #' @return A `"simttepower_summary"` data frame, one row per
 #'   scenario x analysis: the scenario's varied-factor columns,
 #'   `n_sims`, `reject_rate` and its binomial SE (`reject_se`),
+#'   `oc_label` (`"power"`/`"type_I_error"`/`NA`, see Details),
 #'   `n_errors`, `median_runtime_sec`, and (when the analysed events
 #'   carried them) `median_duration` and one `median_events_<arm>` per
 #'   arm.
+#'
+#' @section `oc_label`, power vs. type I error:
+#' `reject_rate` is the same statistic either way -- the fraction of
+#' replicates a `reject` rule rejected on. `oc_label` names which
+#' reading applies, read from the scenario's own declared `truth`
+#' ([scenario_grid()]'s `truth` argument), never guessed: `"type_I_error"`
+#' when `truth` is declared and every value in it is exactly `0` (a null
+#' scenario -- there is no real effect, so a rejection is a false
+#' positive by construction); `"power"` when `truth` is declared and any
+#' value is non-zero; `NA` when no `truth` was declared for that
+#' scenario at all -- `summary()` has nothing to read `oc_label` from,
+#' and does not guess from the varied-factor values themselves (a
+#' `param.IC50` of `1` is not necessarily "null" for every design). This
+#' is a labelling convenience only, not a new statistic -- both readings
+#' are `reject_rate`/`reject_se`, and a scenario with no `truth` is
+#' still fully summarised, just without this one extra label.
 #' @seealso [power_sim()], [reject_default()], [plot_power()]
 #' @examples
 #' \donttest{
@@ -66,6 +83,7 @@ summary.simttepower_result <- function(object, ...) {
         out$n_sims <- n
         out$reject_rate <- p_reject
         out$reject_se <- sqrt(p_reject * (1 - p_reject) / n)
+        out$oc_label <- .oc_label(scn_truth[[out$scenario_id]])
         out$n_errors <- sum(!is.na(grp$error))
         out$median_runtime_sec <- stats::median(grp$runtime_sec, na.rm = TRUE)
         if (has_duration) {
@@ -80,6 +98,15 @@ summary.simttepower_result <- function(object, ...) {
     out <- .rbind_fill(rows)
     rownames(out) <- NULL
     structure(out, class = c("simttepower_summary", class(out)))
+}
+
+# "power" vs. "type_I_error": read from a scenario's own declared
+# truth, never guessed from varied-factor values. See summary()'s own
+# "oc_label" doc section for why NULL/unset truth stays NA rather than
+# a guess.
+.oc_label <- function(truth) {
+    if (is.null(truth) || !length(truth)) return(NA_character_)
+    if (all(unlist(truth) == 0)) "type_I_error" else "power"
 }
 
 #' @export

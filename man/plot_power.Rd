@@ -10,7 +10,8 @@ plot_power(
   y = "reject_rate",
   color = NULL,
   facet = NULL,
-  ci = TRUE
+  ci = TRUE,
+  se_col = NULL
 )
 }
 \arguments{
@@ -22,9 +23,7 @@ x-axis (e.g. \code{"n"}, \code{"IC50"} -- whatever \code{\link[=scenario_grid]{s
 named it).}
 
 \item{y}{Character scalar, default \code{"reject_rate"}: the column to plot
-on the y-axis. The CI ribbon (\code{ci = TRUE}) only ever draws for the
-default -- it needs \code{reject_se}, which \code{summary()} only computes for
-\code{reject_rate}.}
+on the y-axis.}
 
 \item{color}{Character scalar or \code{NULL} (default): a second
 varied-factor column to map to colour/fill (and the ribbon's
@@ -33,19 +32,28 @@ grouping), for comparing curves across e.g. two arms' sample sizes.}
 \item{facet}{Character scalar or \code{NULL} (default): a third
 varied-factor column to facet by (\code{ggplot2::facet_wrap()}).}
 
-\item{ci}{Logical, default \code{TRUE}: draw a 95\% binomial CI ribbon
-(\verb{reject_rate +/- 1.96 * reject_se}, clipped to \verb{[0, 1]}) around the
-curve. Only takes effect when \code{y = "reject_rate"} (the default) and
-\code{summary} carries \code{reject_se}; silently skipped otherwise.}
+\item{ci}{Logical, default \code{TRUE}: draw a \verb{y +/- 1.96 * <se column>}
+ribbon (clipped to \verb{[0, 1]}) around the curve, when there is an SE
+column to draw it from -- see \code{se_col}. Silently skipped when there
+isn't one, never an error (a \code{y} with no natural SE, e.g.
+\code{"median_runtime_sec"}, is a perfectly good plot on its own).}
+
+\item{se_col}{Character scalar or \code{NULL} (default): the column to
+draw the CI ribbon from. \code{NULL} auto-pairs by convention --
+\code{"reject_se"} when \code{y = "reject_rate"} (the default), or \code{"<y>_se"}
+for any other \code{y} if that column exists in \code{summary} -- and draws
+no ribbon if neither is found. An explicit \code{se_col} must be a real
+column of \code{summary}; errors clearly, naming it, otherwise.}
 }
 \value{
 A \code{ggplot} object.
 }
 \description{
-The common case: rejection rate (power, or type I error, depending on
-the scenario) over one varied factor, from a \code{\link[=summary.simttepower_result]{summary.simttepower_result()}}
-data frame. \code{ggplot2} is a \code{Suggests} dependency; \code{plot_power()} errors
-clearly, telling the user to install it, if it isn't available.
+The common case: rejection rate (power, or type I error -- see
+\code{\link[=summary.simttepower_result]{summary.simttepower_result()}}'s own \code{oc_label}) over one varied
+factor, from a \code{\link[=summary.simttepower_result]{summary.simttepower_result()}} data frame. \code{ggplot2}
+is a \code{Suggests} dependency; \code{plot_power()} errors clearly, telling
+the user to install it, if it isn't available.
 }
 \details{
 Deliberately just the one common shape (a curve, optionally coloured

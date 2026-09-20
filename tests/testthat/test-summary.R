@@ -44,6 +44,26 @@ test_that("summary() forwards ... to the reject rule (e.g. p_col)", {
     expect_true(all(s$reject_rate >= 0 & s$reject_rate <= 1))
 })
 
+test_that("summary()'s oc_label reads truth: all-zero is type_I_error, else power", {
+    g_null <- scenario_grid(.test_design(), over = list(arm = "experimental",
+        field = "param.IC50", values = c(1)),
+        truth = function(v) c(estimate_armexperimental = 0))
+    res_null <- power_sim(g_null, n_sims = 3, seed = 1, progress = FALSE)
+    expect_identical(summary(res_null)$oc_label, "type_I_error")
+
+    g_alt <- scenario_grid(.test_design(), over = list(arm = "experimental",
+        field = "param.IC50", values = c(3)),
+        truth = function(v) c(estimate_armexperimental = -0.3))
+    res_alt <- power_sim(g_alt, n_sims = 3, seed = 1, progress = FALSE)
+    expect_identical(summary(res_alt)$oc_label, "power")
+
+    # No truth declared at all: NA, not a guess.
+    g_none <- scenario_grid(.test_design(), over = list(arm = "experimental",
+        field = "param.IC50", values = c(1)))
+    res_none <- power_sim(g_none, n_sims = 3, seed = 1, progress = FALSE)
+    expect_identical(summary(res_none)$oc_label, NA_character_)
+})
+
 test_that("print.simttepower_summary() runs without error", {
     g <- scenario_grid(.test_design(), over = list(arm = "experimental",
         field = "param.IC50", values = c(1)))

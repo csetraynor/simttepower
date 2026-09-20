@@ -17,6 +17,7 @@ one candidate p-value column -- see \code{\link[=reject_default]{reject_default(
 A \code{"simttepower_summary"} data frame, one row per
 scenario x analysis: the scenario's varied-factor columns,
 \code{n_sims}, \code{reject_rate} and its binomial SE (\code{reject_se}),
+\code{oc_label} (\code{"power"}/\code{"type_I_error"}/\code{NA}, see Details),
 \code{n_errors}, \code{median_runtime_sec}, and (when the analysed events
 carried them) \code{median_duration} and one \verb{median_events_<arm>} per
 arm.
@@ -27,6 +28,24 @@ A separate function from \code{\link[=power_sim]{power_sim()}} itself (see
 per-replicate results; \code{summary()} collapses them to one row per
 (scenario x analysis) operating-characteristic summary.
 }
+\section{\code{oc_label}, power vs. type I error}{
+
+\code{reject_rate} is the same statistic either way -- the fraction of
+replicates a \code{reject} rule rejected on. \code{oc_label} names which
+reading applies, read from the scenario's own declared \code{truth}
+(\code{\link[=scenario_grid]{scenario_grid()}}'s \code{truth} argument), never guessed: \code{"type_I_error"}
+when \code{truth} is declared and every value in it is exactly \code{0} (a null
+scenario -- there is no real effect, so a rejection is a false
+positive by construction); \code{"power"} when \code{truth} is declared and any
+value is non-zero; \code{NA} when no \code{truth} was declared for that
+scenario at all -- \code{summary()} has nothing to read \code{oc_label} from,
+and does not guess from the varied-factor values themselves (a
+\code{param.IC50} of \code{1} is not necessarily "null" for every design). This
+is a labelling convenience only, not a new statistic -- both readings
+are \code{reject_rate}/\code{reject_se}, and a scenario with no \code{truth} is
+still fully summarised, just without this one extra label.
+}
+
 \examples{
 \donttest{
 comparator <- arm(label = "comparator", n = 30, model = "irm1_hazard",

@@ -71,13 +71,28 @@ simtte itself is on CRAN.
   = )` and `reject_direction()` already read a per-scenario truth for
   direction-aware rejection; a bias/coverage summary alongside power/
   type-I-error would read the same `truth`, not add a new input. Not
-  built -- no current design calling for it.
+  built -- no current design calling for it. **Design sketch**:
+  `summary()` would add `bias = mean(estimate - truth)` and
+  `coverage = mean(truth >= ci_lo & truth <= ci_hi)` per scenario x
+  analysis group, reusing the same `.pick_estimate_and_truth()`-style
+  matching `reject_direction()` already does to find which `estimate_*`/
+  `hr_lo_*`/`hr_hi_*` columns pair with which `truth` entry -- no new
+  input, no change to `power_sim()`'s own result rows, `truth` continues
+  to mean exactly what it means today.
 - **Ragged grids** (a different `n_sims` per scenario). The
   global-index -> RNG-stream mapping
   (`(scenario_row - 1) * n_sims + replicate`) assumes one rectangular
   `n_sims` for the whole grid (`reports/01_phase1_plan.md` section 5);
   a ragged grid needs a registration-order index instead. Not built --
-  nothing yet calls for it.
+  nothing yet calls for it. **Design sketch**: replace the closed-form
+  `global_index` formula with a running counter accumulated while
+  walking `grid` row by row (each scenario contributing its own
+  `n_sims[i]` consecutive indices) -- `.build_task_table()` already
+  builds `task_table` by walking rows in order, so this is a change to
+  how `global_index`/`replicate` are assigned there, not to the
+  stream-derivation or dispatch logic downstream of it; `power_sim()`'s
+  own single `n_sims` scalar becomes a per-row vector, defaulting to the
+  current scalar behaviour when every value is equal.
 - **C3 (PK/PD-state-dependent visits)**: blocked upstream, not a
   simttepower gap. simtte itself has not built a visit process that
   reacts to a subject's simulated PK/PD state (`sim_tte`'s own

@@ -74,3 +74,41 @@ test_that("plot_power() skips the ribbon for a non-default y with no matching se
     layer_geoms <- vapply(p$layers, function(l) class(l$geom)[1], "")
     expect_false("GeomRibbon" %in% layer_geoms)
 })
+
+test_that("plot_power() auto-pairs a <y>_se column by convention", {
+    skip_if_not_installed("ggplot2")
+    s <- .plot_summary()
+    s$my_estimate <- s$reject_rate  # any numeric y
+    s$my_estimate_se <- s$reject_se  # "<y>_se" convention
+    p <- plot_power(s, x = "IC50", y = "my_estimate")
+    layer_geoms <- vapply(p$layers, function(l) class(l$geom)[1], "")
+    expect_true("GeomRibbon" %in% layer_geoms)
+})
+
+test_that("plot_power(se_col = ) overrides the auto-paired column", {
+    skip_if_not_installed("ggplot2")
+    s <- .plot_summary()
+    # Synthetic, non-degenerate values: .plot_summary()'s own tiny grid
+    # can give an exact reject_rate of 0 or 1 (reject_se = 0 either way),
+    # which would make any se_col's ribbon identical regardless of its
+    # actual value -- not what this test means to check.
+    s$reject_rate <- seq(0.3, 0.7, length.out = nrow(s))
+    s$reject_se <- 0.05
+    s$other_se <- 0.2  # a deliberately different SE column
+    p_auto <- plot_power(s, x = "IC50")
+    p_override <- plot_power(s, x = "IC50", se_col = "other_se")
+    built_auto <- ggplot2::ggplot_build(p_auto)
+    built_override <- ggplot2::ggplot_build(p_override)
+    # The ribbon layer is the 1st layer (geom_ribbon added before
+    # geom_line()/geom_point()) -- its ymin/ymax should differ between
+    # the two SE columns.
+    expect_false(isTRUE(all.equal(built_auto$data[[1]]$ymin,
+        built_override$data[[1]]$ymin)))
+})
+
+test_that("plot_power(se_col = ) errors clearly on an absent column", {
+    skip_if_not_installed("ggplot2")
+    s <- .plot_summary()
+    expect_error(plot_power(s, x = "IC50", se_col = "not_a_column"),
+        "not a column")
+})
