@@ -56,6 +56,11 @@ it is a development-only field (see above) that will not be present in
 the actual CRAN submission, once `simtte` is on CRAN and the field is
 removed.
 
+Re-confirmed 2026-10-20 against a refreshed `simtte` 1.1.0 (`../simtte`
+commit `b6b9841`): the same result, `0 errors | 0 warnings | 1 note`
+(the note above, unchanged) -- see
+`reports/11_simtte_refresh_review.md` for the full account.
+
 `devtools::spell_check()` (with `inst/WORDLIST` covering package-
 specific/technical terms: CMRG, L'Ecuyer, PSOCK, SGE, Slurm, simtte,
 tte, and a handful of British-spelling/contraction false positives):
