@@ -1,12 +1,11 @@
 # CRAN submission comments (draft -- not yet submitted)
 
-This file is prepared as part of release *prep*, not submission. See
-`STATUS.md` for the release order and current state. **simttepower is
-not being submitted to CRAN at the time this file was written** -- its
-one hard dependency, `simtte` (>= 1.1.0), is not yet on CRAN itself.
-The intended order is: simtte 1.1.0 to CRAN, then simttepower, then the
-accompanying manuscript(s). This file will be revisited (and this
-paragraph removed) once that order is ready to start.
+This file is prepared as part of release *prep*. See `STATUS.md` for the
+release order and current state. The intended order was: simtte to CRAN,
+then simttepower, then the accompanying manuscript(s). `simtte` 2.0.0
+reached CRAN on 2026-11-07, so the dependency that previously blocked
+this submission is now a published CRAN package and simttepower's
+`Imports` is satisfiable from CRAN alone.
 
 ## What the package does
 
@@ -19,47 +18,35 @@ chunks for a job scheduler.
 
 ## The `simtte` dependency
 
-`Imports: simtte (>= 1.1.0)`. Every simulated trial arm is built on
-`simtte::sim_tte_ode()`; the parallel/chunked execution paths build on
-`simtte::simtte_prepare_model()`/`simtte_model_cache()`/
-`simtte_model_cache_clear()` (all added in simtte 1.1.0, in direct
-response to feedback from this package's own development --
-`../simtte/reports/30_simttepower_feedback_worker_loading.md`).
-simttepower cannot be submitted before `simtte` is itself on CRAN.
+`Imports: simtte (>= 2.0.0)`, a published CRAN package. Every simulated
+trial arm is built on `simtte::sim_tte_ode()`; the parallel and chunked
+execution paths build on `simtte::simtte_prepare_model()`,
+`simtte_model_cache()` and `simtte_model_cache_clear()`. All four are
+exported by `simtte` 2.0.0. simttepower calls no `simtte` internals.
 
-The dev-only `Remotes: csetraynor/simtte` entry in `DESCRIPTION`
-(installs `simtte` from GitHub, since it isn't on CRAN yet) is removed
-at the point `simtte` is available there -- **not removed yet**, since
-removing it now would make `Imports: simtte (>= 1.1.0)` unresolvable
-for anyone installing from source without also having `simtte`
-pre-installed by some other route.
+The version bound is `>= 2.0.0` because `sim_tte_ode()` and the
+model-preparation functions above are not present in the previous CRAN
+release (1.0.2).
 
 ## R CMD check results
 
-`R CMD check --as-cran` (both the fast, `SIMTTEPOWER_SLOW_TESTS` unset,
-and the full, slow-tests-on run -- see `dev/run-tests.R --check` and
-`dev/run-tests.R --check --fast`): **0 errors, 0 warnings, 1 NOTE**:
+`R CMD check --as-cran` with the slow tests on (`dev/run-tests.R
+--check`): **0 errors, 0 warnings, 1 NOTE**:
 
 ```
 Maintainer: 'Carlos Traynor <carlos.traynor.qcp@gmail.com>'
 
 New submission
-
-Unknown, possibly misspelled, fields in DESCRIPTION:
-  'Remotes'
 ```
 
-Both parts of this NOTE are expected for a first submission and are not
-attempted to be silenced here: "New submission" is inherent to any
-package's first CRAN submission; the `Remotes` field is flagged because
-it is a development-only field (see above) that will not be present in
-the actual CRAN submission, once `simtte` is on CRAN and the field is
-removed.
+"New submission" is inherent to any package's first CRAN submission and
+is not attempted to be silenced here. It is the only NOTE.
 
-Re-confirmed 2026-10-20 against a refreshed `simtte` 1.1.0 (`../simtte`
-commit `b6b9841`): the same result, `0 errors | 0 warnings | 1 note`
-(the note above, unchanged) -- see
-`reports/11_simtte_refresh_review.md` for the full account.
+Checked 2026-11-07 against `simtte` 2.0.0 installed from CRAN
+(`packageDescription("simtte")$Repository` is `CRAN`). The test suite
+passes with `SIMTTEPOWER_SLOW_TESTS` unset and set; with it set, 224
+passing, 0 failures, and 2 skips (a Windows-only fork-cluster test, and
+one test guarded on `ggplot2` being absent).
 
 `devtools::spell_check()` (with `inst/WORDLIST` covering package-
 specific/technical terms: CMRG, L'Ecuyer, PSOCK, SGE, Slurm, simtte,

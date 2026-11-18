@@ -31,8 +31,4 @@ Config/testthat/edition: 3
 VignetteBuilder: knitr
 Imports:
     parallel,
-    simtte (>= 1.1.0)
-# Dev-only: installs simtte from GitHub since it is not yet on CRAN.
-# REMOVE BEFORE CRAN SUBMISSION.
-Remotes:
-    csetraynor/simtte
+    simtte (>= 2.0.0)
